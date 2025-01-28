@@ -54,9 +54,8 @@ def get_emojis(emotion_analysis, object_keywords):
                 emojis.append(get_emoji(detail['감정']))
 
     # 사물 키워드에 대한 이모지 선택 (최대 5개)
-    if 'object_keywords' in object_keywords and isinstance(object_keywords['object_keywords'], list):
-        for keyword in object_keywords['object_keywords'][:5]:
+    if '사물 키워드' in object_keywords and isinstance(object_keywords['사물 키워드'], list):
+        for keyword in object_keywords['사물 키워드'][:5]:
             emojis.append(get_emoji(keyword))
 
     return emojis
-

@@ -29,7 +29,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_db_client():
-    app.mongodb_client = AsyncIOMotorClient(os.getenv("MONGODB_URL", "mongodb://localhost:27017"))
+    app.mongodb_client = AsyncIOMotorClient(os.getenv("MONGODB_URL", "mongodb+srv://20220784:duksung2022@path22.64mkm.mongodb.net/?retryWrites=true&w=majority&appName=path22"))
     app.database = app.mongodb_client[os.getenv("DB_NAME", "diary_db")]
     print("MongoDB에 연결되었습니다!")
 
