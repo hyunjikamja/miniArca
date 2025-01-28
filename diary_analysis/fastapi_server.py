@@ -9,6 +9,9 @@ import ilgibunseog
 from emotion_compute import calculate_final_emotion
 import json
 from dotenv import load_dotenv
+from bson import ObjectId
+import emoji_select
+import traceback
 
 # 환경 변수 로드
 load_dotenv()
@@ -65,17 +68,23 @@ async def analyze_diary(entry: DiaryEntry):
         }
 
         # MongoDB에 저장
-        await app.database.diary_entries.insert_one(analysis_data)
+        result = await app.database.diary_entries.insert_one(analysis_data)
+        inserted_id = str(result.inserted_id)
 
         # 분석 결과 로깅
         print(f"Emotion analysis response: {emotion_analysis}")
         print(f"Place extraction response: {place_extraction}")
         print(f"Object keywords response: {object_keywords}")
 
+        # 이모지 선택 및 저장 실행
+        emojis = await select_and_save_emoji(inserted_id)
+
         return {
+            "id": inserted_id,
             "emotion_analysis": emotion_analysis,
             "place_extraction": place_extraction,
-            "object_keywords": object_keywords
+            "object_keywords": object_keywords,
+            "emojis": emojis
         }
 
     except ValueError as ve:
@@ -87,6 +96,7 @@ async def analyze_diary(entry: DiaryEntry):
     except Exception as e:
         print(f"Unexpected error occurred: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/entries")
 async def get_entries():
@@ -114,6 +124,51 @@ async def get_final_emotions():
     except Exception as e:
         print(f"Unexpected error occurred: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+async def select_and_save_emoji(id: str):
+    try:
+        document = await app.database.diary_entries.find_one({"_id": ObjectId(id)})
+        
+        if not document:
+            print(f"Document not found for id: {id}")
+            return
+        
+        emotion_analysis = document.get("emotion_analysis", {})
+        object_keywords = document.get("object_keywords", {})
+        
+        print(f"Emotion analysis: {emotion_analysis}")
+        print(f"Object keywords: {object_keywords}")
+        
+        # emoji_select.py의 get_emojis 함수 호출
+        try:
+            emojis = emoji_select.get_emojis(emotion_analysis, object_keywords)
+            print(f"Selected emojis: {emojis}")
+        except Exception as emoji_error:
+            print(f"Error in emoji selection: {emoji_error}")
+            print(f"Traceback: {traceback.format_exc()}")
+            return None
+        
+        # 결과를 MongoDB에 저장
+        try:
+            update_result = await app.database.diary_entries.update_one(
+                {"_id": ObjectId(id)},
+                {"$set": {"이모지": emojis}}
+            )
+            
+            if update_result.modified_count == 0:
+                print(f"Failed to update document {id}")
+            else:
+                print(f"Successfully updated document {id} with emojis: {emojis}")
+        except Exception as db_error:
+            print(f"Error updating database: {db_error}")
+            print(f"Traceback: {traceback.format_exc()}")
+            return None
+        
+        return emojis
+    except Exception as e:
+        print(f"Error selecting and saving emoji: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return None
 
 if __name__ == "__main__":
     import uvicorn
