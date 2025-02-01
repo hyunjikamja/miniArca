@@ -1,0 +1,3 @@
+Label: pants, Hex: #1b2327
+Label: jacket, Hex: #483d39
+Label: shoe, Hex: #c6c9c3

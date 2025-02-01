@@ -1,0 +1,12 @@
+names :
+- long Curly Hair
+- long Straight Hair
+- long Wavy Hair
+- short curly hair
+- short straight hair
+- short wavy hair
+nc: 6
+
+train: C:/Users/DS/human/hair/train/images
+val: C:/Users/DS/human/hair/valid/images
+test: C:/Users/DS/human/hair/test/images

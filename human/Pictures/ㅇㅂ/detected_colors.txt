@@ -1,0 +1,4 @@
+Label: short curly hair, Hex: #323536
+Label: pants, Hex: #2d4554
+Label: jacket, Hex: #cdd8e0
+Label: shoe, Hex: #72787d

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>이름 입력</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+<body>
+    <h1>이름을 입력하세요</h1>
+    <input type="text" id="userName" placeholder="이름 입력">
+    <button id="submitBtn">제출</button>
+
+    <script>
+        $(document).ready(function(){
+            $("#submitBtn").click(function(){
+                var userName = $("#userName").val();
+                $.post("/submit_name", {name: userName}, function(data){
+                    if(data.success) {
+                        window.location.href = "/capture";
+                    } else {
+                        alert("이름 제출에 실패했습니다.");
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
