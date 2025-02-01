@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Capture and Analysis</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+<body>
+    <h1>Image Capture and Analysis</h1>
+    <button id="captureBtn">Capture Photo</button>
+    <button id="analyzeBtn">Analyze Photo</button>
+    <div id="message"></div>
+
+    <script>
+        $(document).ready(function(){
+            $("#captureBtn").click(function(){
+                $.post("/capture", function(data){
+                    $("#message").text(data.message);
+                });
+            });
+
+            $("#analyzeBtn").click(function(){
+                $.post("/analyze", function(data){
+                    $("#message").text(data.message);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
