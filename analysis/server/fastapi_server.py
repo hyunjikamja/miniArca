@@ -5,7 +5,8 @@ import os
 # analysis 폴더를 sys.path에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, HTTPException
+import os
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -18,6 +19,15 @@ from bson import ObjectId
 from model import emoji_select
 import traceback
 
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
+import os
+from dotenv import load_dotenv
+from datetime import datetime
+import base64
+from model.analyze import analyze_image  # analyze_image 함수를 임포트합니다
+
 # 환경 변수 로드
 load_dotenv()
 
@@ -26,7 +36,7 @@ app = FastAPI()
 # CORS 미들웨어 추가
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 실제 운영 환경에서는 구체적인 오리진을 지정
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,7 +58,38 @@ class DiaryEntry(BaseModel):
 
 cached_analysis_results = {}
 
-@app.post("/analyze")
+@app.post("/analyzePhoto")
+async def analyze_photo(file: UploadFile = File(...)):
+    try:
+        # 파일을 임시로 저장
+        temp_file_path = f"temp_{file.filename}"
+        with open(temp_file_path, "wb") as buffer:
+            buffer.write(await file.read())
+        
+        # 사진 분석 실행
+        user_name = "temp_user"  # 실제 사용 시 사용자 이름을 적절히 설정해야 합니다
+        analysis_result = analyze_image(user_name)
+        
+        # 임시 파일 삭제
+        os.remove(temp_file_path)
+        
+        # MongoDB에 분석 결과 저장
+        analysis_data = {
+            "file_name": file.filename,
+            "analysis_result": analysis_result,
+            "timestamp": datetime.now()
+        }
+        result = await app.database.photo_analysis.insert_one(analysis_data)
+        
+        return {
+            "message": "사진 분석 완료 및 결과 저장됨",
+            "analysis_id": str(result.inserted_id),
+            "analysis_result": analysis_result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"사진 분석 중 오류 발생: {str(e)}")
+
+@app.post("/analyzeDiary")
 async def analyze_diary(entry: DiaryEntry):
     try:
         content = entry.content
