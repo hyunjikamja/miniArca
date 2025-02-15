@@ -1,26 +1,35 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import axios from 'axios';
-import './Diary.css'; // App.css 대신 Diary.css로 변경
+import './Diary.css';
 
 function App() {
   const [diaryText, setDiaryText] = useState('');
   const [analysisResults, setAnalysisResults] = useState(null);
   const [savedEntries, setSavedEntries] = useState([]);
+  const [analysisId, setAnalysisId] = useState(null);
+  const location = useLocation();
 
-  // 일기 분석 요청
+  useEffect(() => {
+    if (location.state && location.state.analysisId) {
+      setAnalysisId(location.state.analysisId);
+    }
+    fetchSavedEntries();
+  }, [location]);
+
   const analyzeDiary = async () => {
     try {
       const response = await axios.post('http://localhost:8000/analyzeDiary', {
-        content: diaryText
+        content: diaryText,
+        analysis_id: analysisId
       });
       setAnalysisResults(response.data);
-      fetchSavedEntries(); // 저장된 데이터 새로고침
+      fetchSavedEntries();
     } catch (error) {
       console.error('분석 오류:', error);
     }
   };
 
-  // 저장된 일기 데이터 가져오기
   const fetchSavedEntries = async () => {
     try {
       const response = await axios.get('http://localhost:8000/entries');
@@ -30,16 +39,10 @@ function App() {
     }
   };
 
-  // 컴포넌트 마운트 시 저장된 데이터 가져오기
-  useEffect(() => {
-    fetchSavedEntries();
-  }, []);
-
   return (
-    <div className="Diary"> {/* App 대신 Diary로 변경 */}
+    <div className="Diary">
       <h1>일기 분석 시스템</h1>
       
-      {/* 일기 입력 섹션 */}
       <div className="input-section">
         <textarea
           value={diaryText}
@@ -49,7 +52,6 @@ function App() {
         <button onClick={analyzeDiary}>분석하기</button>
       </div>
 
-      {/* 분석 결과 표시 섹션 */}
       {analysisResults && (
         <div className="analysis-results">
           <h2>분석 결과</h2>
@@ -66,7 +68,6 @@ function App() {
         </div>
       )}
 
-      {/* 저장된 일기 목록 */}
       <div className="saved-entries">
         <h2>저장된 일기 목록</h2>
         {savedEntries.map((entry, index) => (
@@ -84,4 +85,3 @@ function App() {
 }
 
 export default App;
-
