@@ -1,39 +1,28 @@
-import re
 import sys
 import os
 
 # analysis 폴더를 sys.path에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import os
-from fastapi import FastAPI, HTTPException, UploadFile, File
+import uuid
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 from model import ilgibunseog
 from model.emotion_compute import calculate_final_emotion
+from model.generate_background import generate_anime_background
 import json
 from dotenv import load_dotenv
-from bson import ObjectId
 from model import emoji_select
 import traceback
+from model.analyze import analyze_image
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from motor.motor_asyncio import AsyncIOMotorClient
-from bson import ObjectId
-import os
-from dotenv import load_dotenv
-from datetime import datetime
-import base64
-from model.analyze import analyze_image  # analyze_image 함수를 임포트합니다
-
-# 환경 변수 로드
 load_dotenv()
 
 app = FastAPI()
 
-# CORS 미들웨어 추가
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -55,35 +44,36 @@ async def shutdown_db_client():
 
 class DiaryEntry(BaseModel):
     content: str
+    analysis_id: str
 
 cached_analysis_results = {}
 
 @app.post("/analyzePhoto")
 async def analyze_photo(file: UploadFile = File(...)):
     try:
-        # 파일을 임시로 저장
-        temp_file_path = f"temp_{file.filename}"
-        with open(temp_file_path, "wb") as buffer:
+        inserted_id = str(uuid.uuid4())
+        user_directory = os.path.join("C:/Users/DS/miniArca/analysis/model/Pictures", inserted_id)
+        os.makedirs(user_directory, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"photo_{timestamp}.jpg"
+        filepath = os.path.join(user_directory, filename)
+
+        with open(filepath, "wb") as buffer:
             buffer.write(await file.read())
-        
-        # 사진 분석 실행
-        user_name = "temp_user"  # 실제 사용 시 사용자 이름을 적절히 설정해야 합니다
-        analysis_result = analyze_image(user_name)
-        
-        # 임시 파일 삭제
-        os.remove(temp_file_path)
-        
-        # MongoDB에 분석 결과 저장
-        analysis_data = {
-            "file_name": file.filename,
-            "analysis_result": analysis_result,
-            "timestamp": datetime.now()
+
+        analysis_result = analyze_image(inserted_id)
+
+        new_diary_entry = {
+            "_id": inserted_id,
+            "photo_analysis_result": analysis_result,
+            "file_path": filepath
         }
-        result = await app.database.photo_analysis.insert_one(analysis_data)
-        
+        await app.database.diary_entries.insert_one(new_diary_entry)
+
         return {
             "message": "사진 분석 완료 및 결과 저장됨",
-            "analysis_id": str(result.inserted_id),
+            "analysis_id": inserted_id,
             "analysis_result": analysis_result
         }
     except Exception as e:
@@ -93,43 +83,58 @@ async def analyze_photo(file: UploadFile = File(...)):
 async def analyze_diary(entry: DiaryEntry):
     try:
         content = entry.content
+        analysis_id = entry.analysis_id
         print(f"Received content: {content}")
+        print(f"Received analysis_id: {analysis_id}")
 
-        # 감정, 장소, 키워드 분석 수행
+        document = await app.database.diary_entries.find_one({"_id": analysis_id})
+        if not document:
+            raise HTTPException(status_code=400, detail="사진 분석을 먼저 수행해야 합니다.")
+
         emotion_analysis = ilgibunseog.emotion_anal(content)
         place_extraction = ilgibunseog.extract_places(content)
         object_keywords = ilgibunseog.extract_object_keywords(content)
+        final_emotions = calculate_final_emotion(emotion_analysis)
 
-        # 분석 결과 캐싱
         cached_analysis_results["content"] = content
         cached_analysis_results["emotion_analysis"] = emotion_analysis
 
-        # MongoDB에 저장할 데이터 구성
-        analysis_data = {
-            "content": content,
-            "emotion_analysis": emotion_analysis,
-            "place_extraction": place_extraction,
-            "object_keywords": object_keywords,
-            "timestamp": datetime.now()
+        update_data = {
+            "$set": {
+                "content": content,
+                "emotion_analysis": emotion_analysis,
+                "final_emotions": final_emotions,
+                "place_extraction": place_extraction,
+                "object_keywords": object_keywords,
+                "timestamp": datetime.now()
+            }
         }
 
-        # MongoDB에 저장
-        result = await app.database.diary_entries.insert_one(analysis_data)
-        inserted_id = str(result.inserted_id)
+        await app.database.diary_entries.update_one({"_id": analysis_id}, update_data)
 
-        # 분석 결과 로깅
+        location = place_extraction.get("장소")
+        if location:
+            image_path = generate_anime_background(analysis_id, location)
+            await app.database.diary_entries.update_one(
+                {"_id": analysis_id},
+                {"$set": {"background_image_path": image_path}}
+            )
+
         print(f"Emotion analysis response: {emotion_analysis}")
+        print(f"Final emotions response: {final_emotions}")
         print(f"Place extraction response: {place_extraction}")
         print(f"Object keywords response: {object_keywords}")
+        print(f"Generated background image path: {image_path}")
 
-        # 이모지 선택 및 저장 실행
-        emojis = await select_and_save_emoji(inserted_id)
+        emojis = await select_and_save_emoji(analysis_id)
 
         return {
-            "id": inserted_id,
+            "id": analysis_id,
             "emotion_analysis": emotion_analysis,
+            "final_emotions": final_emotions,
             "place_extraction": place_extraction,
             "object_keywords": object_keywords,
+            "background_image_path": image_path,
             "emojis": emojis
         }
 
@@ -138,17 +143,15 @@ async def analyze_diary(entry: DiaryEntry):
         raise HTTPException(status_code=400, detail=str(ve))
     except json.JSONDecodeError as e:
         print(f"JSON decoding error: {e}")
-        raise HTTPException(status_code=400, detail="Invalid JSON format")
+        raise HTTPException(status_code=500, detail="Invalid JSON format")
     except Exception as e:
         print(f"Unexpected error occurred: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/entries")
 async def get_entries():
     try:
         entries = await app.database.diary_entries.find().to_list(length=100)
-        # ObjectId를 문자열로 변환
         for entry in entries:
             entry["_id"] = str(entry["_id"])
         return entries
@@ -173,7 +176,7 @@ async def get_final_emotions():
 
 async def select_and_save_emoji(id: str):
     try:
-        document = await app.database.diary_entries.find_one({"_id": ObjectId(id)})
+        document = await app.database.diary_entries.find_one({"_id": id})
         
         if not document:
             print(f"Document not found for id: {id}")
@@ -185,7 +188,6 @@ async def select_and_save_emoji(id: str):
         print(f"Emotion analysis: {emotion_analysis}")
         print(f"Object keywords: {object_keywords}")
         
-        # emoji_select.py의 get_emojis 함수 호출
         try:
             emojis = emoji_select.get_emojis(emotion_analysis, object_keywords)
             print(f"Selected emojis: {emojis}")
@@ -194,10 +196,9 @@ async def select_and_save_emoji(id: str):
             print(f"Traceback: {traceback.format_exc()}")
             return None
         
-        # 결과를 MongoDB에 저장
         try:
             update_result = await app.database.diary_entries.update_one(
-                {"_id": ObjectId(id)},
+                {"_id": id},
                 {"$set": {"이모지": emojis}}
             )
             
