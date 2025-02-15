@@ -27,24 +27,21 @@ const PhotoCapture = () => {
 
     const analyzePhoto = async () => {
         if (!capturedImage) return;
-
         try {
-            const blob = await fetch(capturedImage).then((res) => res.blob());
-            const formData = new FormData();
-            formData.append("file", blob, "photo.png");
-
-            await axios.post("http://localhost:8000/analyzePhoto", formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
-
-            // 분석 요청 후 바로 다음 페이지로 이동
-            navigate("/diary");
+          const blob = await fetch(capturedImage).then((res) => res.blob());
+          const formData = new FormData();
+          formData.append("file", blob, "photo.png");
+          const response = await axios.post("http://localhost:8000/analyzePhoto", formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          const analysisId = response.data.analysis_id;
+          // 분석 요청 후 analysis_id를 포함하여 다음 페이지로 이동
+          navigate("/diary", { state: { analysisId } });
         } catch (error) {
-            console.error('사진 분석 요청 오류:', error);
+          console.error('사진 분석 요청 오류:', error);
         }
-    };
+      };
+      
 
     return (
         <div>
