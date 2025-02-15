@@ -15,12 +15,14 @@ const upload = multer({ storage: multer.memoryStorage() });
 // FastAPI 서버로 일기 분석 요청을 전달하는 미들웨어
 app.post('/analyzeDiary', async (req, res) => {
   try {
-    const response = await axios.post('http://localhost:8000/analyzeDiary', req.body);
+    const { content, analysis_id } = req.body;
+    const response = await axios.post('http://localhost:8000/analyzeDiary', { content, analysis_id });
     res.json(response.data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 // FastAPI 서버로 사진 분석 요청을 전달하는 미들웨어
 app.post('/analyzePhoto', upload.single('file'), async (req, res) => {
